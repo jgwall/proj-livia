@@ -13,7 +13,7 @@ source("breedart.r")
 
 # TODO: Convert to shinydashboard and use collapsable boxes for left-hand menu items? Or do a 3-column layout?
 # TODO: Any use of including icon() calls to make prettier?
-# Define UI for application that draws a histogram
+# TODO: Switch to a fillPage() layout so always fills the page?
 
 ################
 # Header layout
@@ -22,44 +22,124 @@ header = dashboardHeader(title = "Livia - Exploring Evolution with Images",
                          titleWidth = "40%")
 
 ################
+# Input Components
+################
+
+# Input file selector
+file_load_input = fileInput("infile", "Target image (file)")
+
+# Maximum pixels allowed
+max_pixels_input = numericInput(
+  "max_pixels",
+  "Maximum pixels allowed",
+  value = 1000,
+  min = 1,
+  max = 10000,
+  step = 500
+)
+
+# Grayscale image?
+grayscale_input = checkboxInput("grayscale", "Grayscale",
+                                value = FALSE, width = '100%')
+# Run button
+run_button = actionButton("run", "Evolve!")
+
+# Population size
+population_size_input = sliderInput(
+  "popsize",
+  "Population Size:",
+  min = 1,
+  max = 1000,
+  value = 10
+)
+
+# Selection intensity
+selection_intensity_input = sliderInput(
+  "selection",
+  "Selection Intensity (= fraction of offspring that are selected):",
+  min = 0.001,
+  max = 1,
+  value = 0.1
+)
+
+# Number of generations
+num_generations_input = numericInput(
+  "generations",
+  "Generations of selection",
+  value = 1000,
+  min = 1,
+  max = 10000,
+  step = 500
+)
+
+# Mutation rate
+mutation_rate_input = sliderInput(
+  "mutation_rate",
+  "Mutation rate:",
+  min = 0.0001,
+  max = 1,
+  value = 0.1,
+  step = 0.05
+)
+
+# Mutation size distribution
+mutation_size_input = sliderInput(
+  "mutation_sd",
+  "Mutation size (standard deviation):",
+  min = 0,
+  max = 2,
+  value = 0.1,
+  step = 0.05
+)
+
+# Mutation size plot
+mutation_size_output = plotOutput("mutation_sizes", height = "100px")
+
+# Display of target image
+target_image_display = box(
+  title = "Target Image",
+  status = "primary",
+  width = "100%",
+  solidHeader = TRUE,
+  plotOutput("target_image", height="300px")
+)
+
+# Current population average
+current_pop_display = box(
+  title = "Current Pop Average",
+  status = "success",
+  width = "100%",
+  solidHeader = TRUE,
+  plotOutput("current_pop")
+)
+
+fitness_progress_display = box(
+  title = "Fitness",
+  status = "warning",
+  width = "100%",
+  solidHeader = TRUE,
+  plotOutput("fitness_progress")
+)
+
+################
 # Sidebar layout
 ################
-sidebar = dashboardSidebar(disable = TRUE)
-#
+sidebar = dashboardSidebar(
+  width = "30%",
+  
+  # Sidebar components
+  target_image_display,
+  file_load_input,
+  max_pixels_input,
+  grayscale_input,
+  run_button
+)
+
 
 ###################
 # Main panel layout
 ###################
 body =  dashboardBody(fluidRow(
-  column(
-    width = 4,
-    # Box for file input parameters
-    box(
-      title = "File Input Options",
-      width = "30%",
-      status = "info",
-      solidHeader = TRUE,
-      collapsible = TRUE,
-      background = 'navy',
-      
-      # Input file selector
-      fileInput("infile", "Target image (file)"),
-      # Maximum pixels allowed
-      numericInput(
-        "max_pixels",
-        "Maximum pixels allowed",
-        value = 1000,
-        min = 1,
-        max = 10000,
-        step = 500
-      ),
-      # Grayscale image?
-      checkboxInput("grayscale", "Grayscale",
-                    value = FALSE, width = '100%'),
-      # Run button
-      actionButton("run", "Evolve!")
-    )
-  ),
   
   # Population parameters
   column(
@@ -72,34 +152,13 @@ body =  dashboardBody(fluidRow(
       collapsible = TRUE,
       background = 'navy',
       
-      # Population size
-      sliderInput(
-        "popsize",
-        "Population Size:",
-        min = 1,
-        max = 1000,
-        value = 10
-      ),
-      # Selection intensity
-      sliderInput(
-        "selection",
-        "Selection Intensity (= fraction of offspring that are selected):",
-        min = 0.001,
-        max = 1,
-        value = 0.1
-      ),
-      # Number of generations
-      numericInput(
-        "generations",
-        "Generations of selection",
-        value = 1000,
-        min = 1,
-        max = 10000,
-        step = 500
-      )
+      # Panel components
+      population_size_input,
+      selection_intensity_input,
+      num_generations_input
+      # TODO - ADD A DISPLAY OF THE RESULTING POPULATION SIZE
     )
   ),
-  # TODO - ADD A DISPLAY OF THE RESULTING POPULATION SIZE
   
   # Mutation parameters
   column(
@@ -113,63 +172,23 @@ body =  dashboardBody(fluidRow(
       background = 'navy',
       
       # Mutation rate
-      sliderInput(
-        "mutation_rate",
-        "Mutation rate:",
-        min = 0.0001,
-        max = 1,
-        value = 0.1,
-        step = 0.05
-      ),
-
-      # Mutation size distribution
-      sliderInput(
-        "mutation_sd",
-        "Mutation size (standard deviation):",
-        min = 0,
-        max = 2,
-        value = 0.1,
-        step = 0.05
-      ),
-      
-      # Mutation size plot
-      plotOutput("mutation_sizes", height = "100px")
-      
+      mutation_rate_input,
+      mutation_size_input,
+      mutation_size_output
     )
   )
 ),
 
 # Output displays
 fluidRow(
+
   column(
     width = 4,
-    box(
-      title = "Target Image",
-      status = "primary",
-      width = "100%",
-      solidHeader = TRUE,
-      plotOutput("target_image")
-    )
+    current_pop_display
   ),
   column(
     width = 4,
-    box(
-      title = "Current Pop Average",
-      status = "success",
-      width = "100%",
-      solidHeader = TRUE,
-      plotOutput("current_pop")
-    )
-  ),
-  column(
-    width = 4,
-    box(
-      title = "Fitness",
-      status = "warning",
-      width = "100%",
-      solidHeader = TRUE,
-      plotOutput("fitness_progress")
-    )
+    fitness_progress_display
   )
 ))
 
@@ -218,15 +237,18 @@ server <- function(input, output, session) {
   
   # Flip evolving population between grayscale and color
   observeEvent(input$grayscale, {
-    #print("Flipping pop to grayscale")
-    for (i in 1:length(current_pop$pop)) {
-      if (input$grayscale) {
-        current_pop$pop[[i]] = grayscale(current_pop$pop[[i]])
-      } else{
-        current_pop$pop[[i]] = add.color(current_pop$pop[[i]])
+    if(!is.null(current_pop$pop)){
+    
+      for (i in 1:length(current_pop$pop)) {
+        # Turn to grayscale if button is checked
+        if (input$grayscale) {
+          current_pop$pop[[i]] = grayscale(current_pop$pop[[i]])
+        # If button not checked, add color channels
+        } else{
+          current_pop$pop[[i]] = add.color(current_pop$pop[[i]])
+        }
       }
     }
-    #print(sapply(current_pop$pop, spectrum))
   })
   
   # Display current target image
