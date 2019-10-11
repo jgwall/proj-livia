@@ -4,6 +4,7 @@ source("breedart.r")
 
 # TODO: Allow user to load a new image (and reset the evolution) throughout.
 #       Bonus: Allow different image to be used seamlessly if dimensions are the same
+# TODO: Allow user to set random seed?
 
 ################
 # Header layout
@@ -72,7 +73,7 @@ num_generations_input = numericInput(
 mutation_rate_input = sliderInput(
   "mutation_rate",
   "Mutation rate:",
-  min = 0.0001,
+  min = 0,
   max = 1,
   value = 0.1,
   step = 0.01
@@ -88,6 +89,11 @@ mutation_size_input = sliderInput(
   step = 0.05
 )
 
+# Warning to load an image before trying to evolve it
+warning_box = span(
+  h3(textOutput("warn_box")), # Reactive so it goes away when no longer an issue
+  style="text-align:center; color:crimson"
+)
 
 # ##############
 # Output Components (usually wrapped into boxes)
@@ -178,7 +184,6 @@ population_box = box(
   population_size_input,
   selection_intensity_input,
   num_generations_input
-  # TODO - ADD A DISPLAY OF THE RESULTING POPULATION SIZE
 )
 
 mutation_box = box(
@@ -207,8 +212,7 @@ sidebar = dashboardSidebar(
   population_box,
   mutation_box,
   run_button,
-  span(h3(textOutput("load_request")), style="text-align:center; color:crimson")
-  # TODO: The above text doesn't stylize correctly; figure out how to properly update
+  warning_box
 )
 
 ###################
@@ -250,6 +254,7 @@ server <- function(input, output, session) {
     if (is.null(input$infile)) {
       return(NULL)
     }
+    # is_running(FALSE) # Stop the evolution if a new image is loaded
     load.image(input$infile$datapath) # Internal path to the loaded data
   })
   
@@ -363,9 +368,6 @@ server <- function(input, output, session) {
     )
     axis(side=1, at=c(-1, 0, 1), font=2, lwd=0, cex.axis=1.5, padj=-0.75)
     }, bg='transparent')
-    
-  # TODO: Make it so image and fitness update every N generations
-  # TODO: Let user adjust parameters only when evolution stopped?
   
   # Reactive data to store the image and fitness data to plot
   current_pop = reactiveValues(avg_image = NULL,
@@ -376,25 +378,30 @@ server <- function(input, output, session) {
   is_running = reactiveVal(FALSE) 
   
   # Help text prompting to load an image if try to evolve before one is up
-  load_request=reactiveVal("")
-  output$load_request = renderText({load_request()})
-  
+  warn_box=reactiveVal("")
+  output$warn_box = renderText({warn_box()})
+
   # Trigger for starting and stopping the evolution process
   observeEvent(input$run, {
     if(is.null(image_target())){  # Don't evolve if haven't loaded image
-      load_request("Please load an image first") 
+      warn_box("Please load an image first") 
     }else if (is_running()) {  # Pause if sim is running
       is_running(FALSE)
-      load_request("")
-      updateActionButton(session, inputId = "run", label = " Evolve!", icon=icon("play"))
+      warn_box("")
     } else{  # Run if sim is paused
       is_running(TRUE)
-      load_request("")
-      updateActionButton(session, inputId = "run", label = " Pause", icon=icon("pause"))
-      
+      warn_box("")
     }
   })
   
+  # Update the Run button based on whether sim is running or not
+  observe({
+    if(is_running()){
+      updateActionButton(session, inputId = "run", label = " Pause", icon=icon("pause"))
+    }else{
+      updateActionButton(session, inputId = "run", label = " Evolve!", icon=icon("play"))
+    }
+  })
   
   
   
@@ -404,6 +411,20 @@ server <- function(input, output, session) {
     invalidateLater(0) # Invalidates this observe() function so it gets run again, like a loop
     isolate({
       if (is_running()) {
+        
+        # Check to make sure dimensions are compatible (largely if someone loads a new image)
+        if(!is.null(current_pop$avg_image) && 
+          height(image_target()) != height(current_pop$avg_image) &&
+          height(image_target()) != height(current_pop$avg_image )){
+          mywarning = paste("Cannot evolve: Target has", nPix(image_target()), 
+                            "pixels but population has", nPix(current_pop$avg_image),
+                            ". Please choose an image with compatible dimensions.")
+          warn_box(mywarning)
+          is_running(FALSE)
+          return(NULL)
+        }
+        
+        # Run the evolution
         result = evolve_images_once(
           target = image_target(),
           current_pop = current_pop,
