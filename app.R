@@ -1,19 +1,9 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
 library(shinydashboard)
 source("breedart.r")
 
-# TODO: Convert to shinydashboard and use collapsable boxes for left-hand menu items? Or do a 3-column layout?
-# TODO: Any use of including icon() calls to make prettier?
-# TODO: Switch to a fillPage() layout so always fills the page?
+# TODO: Allow user to load a new image (and reset the evolution) throughout.
+#       Bonus: Allow different image to be used seamlessly if dimensions are the same
 
 ################
 # Header layout
@@ -42,7 +32,13 @@ max_pixels_input = numericInput(
 grayscale_input = checkboxInput("grayscale", "Grayscale",
                                 value = FALSE, width = '100%')
 # Run button
-run_button = actionButton("run", "Evolve!")
+run_button = actionButton("run", 
+                          "Evolve!",
+                          icon=icon("play"),
+                          width="90%",
+                          align="center",
+                          style="font-size: x-large"
+                          )
 
 # Population size
 population_size_input = sliderInput(
@@ -79,7 +75,7 @@ mutation_rate_input = sliderInput(
   min = 0.0001,
   max = 1,
   value = 0.1,
-  step = 0.05
+  step = 0.01
 )
 
 # Mutation size distribution
@@ -92,28 +88,45 @@ mutation_size_input = sliderInput(
   step = 0.05
 )
 
-# Mutation size plot
-mutation_size_output = plotOutput("mutation_sizes", height = "100px")
+
+# ##############
+# Output Components (usually wrapped into boxes)
+# ##############
+
+# Mutation size plot (not in a box)
+mutation_info = valueBox(
+  value = plotOutput("mutation_sizes", height="85px"),
+  subtitle="Mutation size distribution",
+  icon=icon("bolt"),
+  color='maroon',
+  width=12
+)
+
+# Number of resulting offspring each generation
+offspring_info = valueBoxOutput("num_offspring", width=12)
+
+# Current population fitness
+current_fitness_info = valueBoxOutput("current_fitness", width=12)
 
 # Display of target image
-target_image_display = box(
+target_image_box = box(
   title = "Target Image",
   status = "primary",
   width = "100%",
   solidHeader = TRUE,
-  plotOutput("target_image", height="300px")
+  plotOutput("target_image")
 )
 
 # Current population average
-current_pop_display = box(
+current_pop_box = box(
   title = "Current Pop Average",
-  status = "success",
+  status = "info",
   width = "100%",
   solidHeader = TRUE,
   plotOutput("current_pop")
 )
 
-fitness_progress_display = box(
+fitness_progress_box = box(
   title = "Fitness",
   status = "warning",
   width = "100%",
@@ -121,80 +134,107 @@ fitness_progress_display = box(
   plotOutput("fitness_progress")
 )
 
+info_box = box(
+  title = "Derived parameters",
+  width = "100%",
+  solidHeader = TRUE,
+  status = 'warning',
+  
+  # Components
+  mutation_info, 
+  offspring_info,
+  current_fitness_info
+  
+)
+
+###################
+# Gather input components into boxes
+###################
+file_input_box = box(
+  title = "Image options",
+  width = 14,
+  status = "primary",
+  solidHeader = TRUE,
+  collapsible = TRUE,
+  collapsed=FALSE,
+  background = 'navy',
+  
+  # Panel components
+  file_load_input,
+  max_pixels_input,
+  grayscale_input
+)
+
+population_box = box(
+  title = "Population parameters",
+  width = 14,
+  status = "primary",
+  solidHeader = TRUE,
+  collapsible = TRUE,
+  collapsed = TRUE,
+  background = 'navy',
+  
+  # Panel components
+  population_size_input,
+  selection_intensity_input,
+  num_generations_input
+  # TODO - ADD A DISPLAY OF THE RESULTING POPULATION SIZE
+)
+
+mutation_box = box(
+  title = "Mutation parameters",
+  width = 14,
+  status = "primary",
+  solidHeader = TRUE,
+  collapsible = TRUE,
+  collapsed = TRUE,
+  background = 'navy',
+  
+  # Mutation rate
+  mutation_rate_input,
+  mutation_size_input
+)
+
+
 ################
-# Sidebar layout
+# Organize Sidebar
 ################
 sidebar = dashboardSidebar(
   width = "30%",
   
   # Sidebar components
-  target_image_display,
-  file_load_input,
-  max_pixels_input,
-  grayscale_input,
-  run_button
+  file_input_box,
+  population_box,
+  mutation_box,
+  run_button,
+  span(h3(textOutput("load_request")), style="text-align:center; color:crimson")
+  # TODO: The above text doesn't stylize correctly; figure out how to properly update
+)
+
+###################
+# Organize main panel
+###################
+body =  dashboardBody(
+  
+  fluidRow(
+    column(width = 6,
+         target_image_box),
+    column(width = 6,
+           current_pop_box)
+  ),
+
+  # Output displays
+  fluidRow(
+    column(width = 6,
+           info_box),
+    column(width = 6,
+           fitness_progress_box)
+  )
 )
 
 
-###################
-# Main panel layout
-###################
-body =  dashboardBody(fluidRow(
-  
-  # Population parameters
-  column(
-    width = 4,
-    box(
-      title = "Population parameters",
-      width = "30%",
-      status = "info",
-      solidHeader = TRUE,
-      collapsible = TRUE,
-      background = 'navy',
-      
-      # Panel components
-      population_size_input,
-      selection_intensity_input,
-      num_generations_input
-      # TODO - ADD A DISPLAY OF THE RESULTING POPULATION SIZE
-    )
-  ),
-  
-  # Mutation parameters
-  column(
-    width = 4,
-    box(
-      title = "Mutation parameters",
-      width = "30%",
-      status = "info",
-      solidHeader = TRUE,
-      collapsible = TRUE,
-      background = 'navy',
-      
-      # Mutation rate
-      mutation_rate_input,
-      mutation_size_input,
-      mutation_size_output
-    )
-  )
-),
-
-# Output displays
-fluidRow(
-
-  column(
-    width = 4,
-    current_pop_display
-  ),
-  column(
-    width = 4,
-    fitness_progress_display
-  )
-))
-
-
 ##################
-# Make unified user interface
+# Combine final user interface
 ##################
 ui <- dashboardPage(header, sidebar, body,
                     skin = "purple")
@@ -237,13 +277,12 @@ server <- function(input, output, session) {
   
   # Flip evolving population between grayscale and color
   observeEvent(input$grayscale, {
-    if(!is.null(current_pop$pop)){
-    
+    if (!is.null(current_pop$pop)) {
       for (i in 1:length(current_pop$pop)) {
         # Turn to grayscale if button is checked
         if (input$grayscale) {
           current_pop$pop[[i]] = grayscale(current_pop$pop[[i]])
-        # If button not checked, add color channels
+          # If button not checked, add color channels
         } else{
           current_pop$pop[[i]] = add.color(current_pop$pop[[i]])
         }
@@ -261,7 +300,7 @@ server <- function(input, output, session) {
     }
   })
   
-  # Current population average
+  # Display current population average image
   output$current_pop <- renderPlot({
     if (!is.null(current_pop$avg_image)) {
       par(mar = c(0, 0, 0, 0))
@@ -279,21 +318,52 @@ server <- function(input, output, session) {
   })
   
   
+  # Display number of resulting offspring
+  output$num_offspring = renderValueBox({
+    valueBox(
+      value = round(input$popsize / input$selection),
+      subtitle = "Offspring per generation",
+      icon=icon("users"),
+      color = "purple"
+    )
+  })
+  
+  # Calculate current fitness
+  current_fitness = reactive({
+    print(str(current_pop))
+    if (is.null(current_pop$avg_fitness)) {
+      return(NA) # If nothing happened yet, return NA
+    }else{
+      round(current_pop$avg_fitness[length(current_pop$avg_fitness)], digits=3)
+    }
+  })
+  
+  # Display current population fitness
+  output$current_fitness = renderValueBox({
+    valueBox(
+      value = current_fitness(),
+      subtitle = "Current Fitness",
+      icon=icon("frog"),
+      color = "olive"
+    )
+  })
+
   # Plot spectrum of mutation sizes
   output$mutation_sizes <- renderPlot({
     mutation_dist = get_mutation_sizes(mutation_mean = 0,
                                        mutation_sd = input$mutation_sd)
     x = mutation_dist$size
     y = mutation_dist$density
-    par(mar = c(3, 0, 0, 0))
-    plot(x, y, type = 'l')
+    par(mar = c(1.5, 0, 0, 0), cex.axis=1, col.axis='white')
+    plot(x, y, type = 'l', yaxt='n', xaxt='n', bty='n')
     polygon(c(min(x), x, max(x)),
             c(0, y, 0),
-            col = 'royalblue',
-            border = FALSE)
-  })
-  
-  
+            col = 'maroon',
+            border = NA
+    )
+    axis(side=1, at=c(-1, 0, 1), font=2, lwd=0, cex.axis=1.5, padj=-0.75)
+    }, bg='transparent')
+    
   # TODO: Make it so image and fitness update every N generations
   # TODO: Let user adjust parameters only when evolution stopped?
   
@@ -301,20 +371,34 @@ server <- function(input, output, session) {
   current_pop = reactiveValues(avg_image = NULL,
                                avg_fitness = NULL,
                                pop = NULL)
-  is_running = reactiveVal(FALSE) # Flag to set process running
+  
+  # Flag to set process running
+  is_running = reactiveVal(FALSE) 
+  
+  # Help text prompting to load an image if try to evolve before one is up
+  load_request=reactiveVal("")
+  output$load_request = renderText({load_request()})
   
   # Trigger for starting and stopping the evolution process
   observeEvent(input$run, {
-    if (input$run %% 2 == 0) {
+    if(is.null(image_target())){  # Don't evolve if haven't loaded image
+      load_request("Please load an image first") 
+    }else if (is_running()) {  # Pause if sim is running
       is_running(FALSE)
-      updateActionButton(session, inputId = "run", label = "Evolve!")
-    } else{
+      load_request("")
+      updateActionButton(session, inputId = "run", label = " Evolve!", icon=icon("play"))
+    } else{  # Run if sim is paused
       is_running(TRUE)
-      updateActionButton(session, inputId = "run", label = "Pause")
+      load_request("")
+      updateActionButton(session, inputId = "run", label = " Pause", icon=icon("pause"))
+      
     }
   })
   
-  # Run the evolutino process 1 generation at a time; have to tie to is_running
+  
+  
+  
+  # Run the evolution process 1 generation at a time; have to tie to is_running
   #   and use invalidateLater() to get output partway through. (Not quite clear why.)
   observe({
     invalidateLater(0) # Invalidates this observe() function so it gets run again, like a loop
@@ -327,8 +411,8 @@ server <- function(input, output, session) {
           selection = input$selection,
           mutation_rate = input$mutation_rate,
           mutation_sd = input$mutation_sd,
-          verbose = TRUE,
-          seed = 1
+          verbose = TRUE #,
+          # seed = 1
         )
         
         # Update population data so it triggers an updated display
