@@ -48,7 +48,11 @@ def mutate(img:np.ndarray, mutation_rate = 0.1, mutation_mean = 0, mutation_sd =
     # Determine pixels to mutate
     tochange = np.random.choice((True, False), size=img.size, p=[mutation_rate, 1 - mutation_rate])
     tochange = np.reshape(tochange, newshape=img.shape)
-    indices = np.argwhere(tochange)  # Get the indices involved
+
+    # Get the indices involved
+    indices = np.argwhere(tochange)    # Initial method
+    #indices = np.transpose(np.unravel_index(np.flatnonzero(tochange), tochange.shape))  # Faster method from hpaulj on StackOverflow
+    # TODO: Need to test that this actually still functions properly
 
     # Alter pixels
     changes = np.random.normal(loc=mutation_mean, scale=mutation_sd, size=indices.shape[0])
