@@ -1,6 +1,7 @@
 __author__ = 'jgwall'
 
 from math import sqrt, ceil, log10
+import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 from PIL import Image, ImageOps   # not sure I want to keep this. Do OpenCV instead?
@@ -48,11 +49,7 @@ def mutate(img:np.ndarray, mutation_rate = 0.1, mutation_mean = 0, mutation_sd =
     # Determine pixels to mutate
     tochange = np.random.choice((True, False), size=img.size, p=[mutation_rate, 1 - mutation_rate])
     tochange = np.reshape(tochange, newshape=img.shape)
-
-    # Get the indices involved
-    indices = np.argwhere(tochange)    # Initial method
-    #indices = np.transpose(np.unravel_index(np.flatnonzero(tochange), tochange.shape))  # Faster method from hpaulj on StackOverflow
-    # TODO: Need to test that this actually still functions properly
+    indices = np.argwhere(tochange)  # Get the indices involved
 
     # Alter pixels
     changes = np.random.normal(loc=mutation_mean, scale=mutation_sd, size=indices.shape[0])
@@ -84,7 +81,8 @@ def numpy_to_pil(image):
 
 
 # A convenience function to evolve images a specific number of generations and return the cumulative result
-def evolve_images(target, generations = 1000, gen_interval = None, outprefix = None, verbose = False, seed = None, *args, **kwargs):
+def evolve_images(target, generations = 1000, gen_interval = None, outprefix = None, filetype="png", verbose = False,
+                  plot_intermediate_images = False, seed = None, *args, **kwargs):
 
     # Set random seed if supplied
     if seed:
@@ -98,24 +96,27 @@ def evolve_images(target, generations = 1000, gen_interval = None, outprefix = N
     for i in range(generations):
         current_pop = evolve_images_once(target=target, current_pop=current_pop, *args, **kwargs)
 
-        # Print out progress every n generations
-        if (verbose and (gen_interval is not None) and (i % gen_interval == 0)):
-            print("Generation " + str(i) + ": Average population fitness is " + str(current_pop['avg_fitness'][i]))
-
-        # Save intermediate progress every n generations
-        if ( (outprefix is not None) and (gen_interval is not None) and (i % gen_interval == 0)):
-            # Get output file name
-            num_digits = ceil(log10(generations))
-            mygen = str(i).zfill(num_digits)
-            filestem = outprefix + "." + mygen
+        # Various operations to do every N generations (if supplied):
+        if (gen_interval is not None) and (i % gen_interval == 0):
+            
+            # Print progress data
             if verbose:
-                print("\tSaving progress to intermediate files with output prefix " + filestem)
-                print("\t\tCurrent image has size",current_pop['avg_image'].shape)
+                print("Generation " + str(i) + ": Average population fitness is " + str(current_pop['avg_fitness'][i]))
 
+            # Display current image progress
+            if plot_intermediate_images:
+                plt.imshow(current_pop['avg_image'])
+                
+            # Save intermediate progress
+            if outprefix:
+                # Print info message
+                if verbose:
+                    print("\tSaving progress to intermediate files with output prefix " + outprefix)
+                # Save files
+                save_intermediates(current_pop, current_gen = i, max_generations=generations, outprefix=outprefix, filetype=filetype)
 
-            # Save image and data
-            numpy_to_pil(current_pop['avg_image']).save(filestem + ".png")
-            pickle.dump(current_pop, file=open(filestem + ".pickle", 'wb'))
+    # Save final state
+    save_intermediates(current_pop, current_gen = i, max_generations = generations, outprefix = outprefix , filetype=filetype)
 
     # Convert working values to more manageable ones
     #current_pop['avg_fitness'] = np.array(current_pop['avg_fitness']) / (target.size)  # Normalize fitness to 0-1 scale
@@ -127,6 +128,19 @@ def evolve_images(target, generations = 1000, gen_interval = None, outprefix = N
 
     return current_pop
 
+
+def save_intermediates(current_pop, current_gen, max_generations, outprefix, filetype="png"):
+    num_digits = ceil(log10(max_generations))
+    mygen = str(current_gen).zfill(num_digits)
+    filestem = outprefix + "." + mygen
+
+    # # Save image and data - Matplotlib version, which has issues with grayscale due to color scaling
+    # plt.imshow(current_pop['avg_image'], aspect="equal", interpolation="none")
+    # plt.savefig(filestem + "." + filetype, bbox_inches="tight")
+
+    # Save image and data - PILLOW version
+    numpy_to_pil(current_pop['avg_image']).save(filestem + "." + filetype)
+    pickle.dump(current_pop, file=open(filestem + ".pickle", 'wb'))
 
 
 # Function to evolve images for the Shiny app

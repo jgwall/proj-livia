@@ -1,7 +1,10 @@
-library(parallel)
-library(imager)
+# Teahcing goals
+#  - Can teach basic "random chance + selection can make complex things"
+#  - More advanced, can teach mutation-selection balance
 
-# TODO: combine evolve_images and evolve_images_once so as to not duplicate code
+
+library(imager)
+library(stringr)
 
 #' Resize a [cimg] object to a specified number of max pixels
 #'
@@ -19,18 +22,20 @@ library(imager)
 #' @export
 #'
 #' @examples
-resize_image = function(img, max_pixels) {
+resize_image = function(img, max_pixels, verbose=FALSE) {
   orig_size = height(img) * width(img)
   # If pic is fine (=fewer than max pixels), don't do anything
   if (orig_size <= max_pixels) {
-    cat("Image is already below",
-        max_pixels,
-        "pixels; returning unchanged\n")
+    if(verbose){
+        cat("Image is already below", max_pixels,"pixels; returning unchanged\n")
+    }
     return(img)
   }
   
   # Resize anything that is too big
-  cat("Resizing image to below", max_pixels, "pixels\n")
+  if(verbose) {
+    cat("Resizing image to below", max_pixels, "pixels\n")
+  }
   area_ratio = max_pixels / orig_size
   new = imresize(img, scale = sqrt(area_ratio))
   
@@ -85,7 +90,7 @@ mutate = function(img,
                   mutation_rate = 0.1,
                   mutation_mean = 0,
                   mutation_sd = 0.1) {
-  # Determine pixels to mutate
+  # Determine pixels to mutate; faster to use sample() than rbinom()
   tochange = sample(
     c(T, F),
     size = nPix(img),
@@ -102,9 +107,17 @@ mutate = function(img,
   # Mutate pixes
   img[tochange] = img[tochange] + changes
   
+#   # Fix any pixels that are outside of [0,1] and return the fixed image - About 10-15% slower than below solution checking just the changed pixels, at least in large images
+#   img[img < 0] = 0
+#   img[img > 1] = 1
+  
   # Fix any pixels that are outside of [0,1] and return the fixed image
-  img[img < 0] = 0
-  img[img > 1] = 1
+  to_zero = which(img[tochange] < 0)
+  to_one = which(img[tochange] > 1)
+  
+  img[tochange[to_zero]] = 0
+  img[tochange[to_one]] = 1
+  
   return(img)
 }
 
@@ -143,6 +156,8 @@ average_images = function(images) {
 #' @examples
   evolve_images = function(target, 
                            generations = 1000,
+                           gen_interval = NULL,
+                           outprefix = NULL,
                            verbose = FALSE,
                            seed = NULL,
                            ...) {
@@ -158,9 +173,21 @@ average_images = function(images) {
     current_pop = evolve_images_once(target=target, 
                                      current_pop=current_pop,
                                      ...)
-    # Print out progress
-    if (verbose && i %% 10 == 0) {
+    
+    # Print out progress even n generations
+    if (verbose && !is.null(gen_interval) && i %% gen_interval == 0) {
       cat("Generation", i, ": Average population fitness is", current_pop$avg_fitness[i],"\n")
+    }
+    
+    # Save intermediate progress every n generations
+    if (!is.null(outprefix) && !is.null(gen_interval) && i %% gen_interval == 0) {
+      # if(verbose){
+      #   cat("\tSaving progress to intermediate files with output prefix",outprefix,"\n")
+      # }
+      mygen = str_pad(i, ceiling(log10(generations)), pad='0')
+      saveRDS(current_pop, file=paste(outprefix, mygen, "RDS", sep="."))
+      save.image(current_pop$avg_image, file=paste(outprefix, mygen, "png", sep="."))
+      
     }
   }
   
@@ -184,7 +211,7 @@ evolve_images_once = function(target,
       pop[[i]] = initialize_random(target)
     }
     
-    fitness = sapply(pop, cor, y = target)
+    fitness = sapply(pop, get_fitness, target = target)
     current_pop = list(
       pop = pop,
       avg_fitness = mean(fitness),
@@ -208,8 +235,12 @@ evolve_images_once = function(target,
     mutation_sd = mutation_sd
   )
   
-  # Score fitness by correlation with the target image
-  fitness = sapply(children, cor, y = target)
+#   # Score fitness by correlation with the target image - DEPRECATED
+#   fitness = sapply(children, cor, y = target)
+
+  # Score fitness based on sum of differences with the target
+  fitness = sapply(children, get_fitness, target=target)
+  
   
   # Keep the best X ones to maintain population size
   tokeep = order(fitness, decreasing = T)[1:popsize]
@@ -226,6 +257,10 @@ evolve_images_once = function(target,
   return(result)
 }
 
+get_fitness = function(child, target){
+  num_pixels = nPix(target)
+  (num_pixels - sum(abs(target - child))) / num_pixels    # Expresses fitness as a fraction of the maximum possible distance
+}
 
 #' Get mutation size spectrum
 #'
@@ -238,7 +273,7 @@ evolve_images_once = function(target,
 #' @examples
 get_mutation_sizes = function(mutation_mean, mutation_sd) {
   # Basic distribution
-  points = seq(from = -1, to = 1, by = 0.1)
+  points = seq(from = -1, to = 1, by = 0.02)
   density = dnorm(points, mean = mutation_mean, sd = mutation_sd)
   
   # Add in things outside the -1, 1 range

@@ -1,10 +1,25 @@
 library(shiny)
 library(shinydashboard)
+library(shinyjs)
 source("breedart.r")
 
-# TODO: Allow user to load a new image (and reset the evolution) throughout.
-#       Bonus: Allow different image to be used seamlessly if dimensions are the same
 # TODO: Allow user to set random seed?
+# TODO: Add # pixels to target image window title
+# Change y axis label on fitness
+
+# Function to reset the app
+reset_app = "shinyjs.reset = function() {history.go(0)}"
+
+################
+# Default values for selections
+################
+default_max_pixels=1000
+default_grayscale=FALSE
+default_popsize=10
+default_selection_intensity=0.1
+default_generations=1000
+default_mutation_rate=0.1
+default_mutation_size=0.1
 
 ################
 # Header layout
@@ -23,7 +38,7 @@ file_load_input = fileInput("infile", "Target image (file)")
 max_pixels_input = numericInput(
   "max_pixels",
   "Maximum pixels allowed",
-  value = 1000,
+  value = default_max_pixels,
   min = 1,
   max = 10000,
   step = 500
@@ -31,7 +46,7 @@ max_pixels_input = numericInput(
 
 # Grayscale image?
 grayscale_input = checkboxInput("grayscale", "Grayscale",
-                                value = FALSE, width = '100%')
+                                value = default_grayscale, width = '100%')
 # Run button
 run_button = actionButton("run", 
                           "Evolve!",
@@ -41,13 +56,22 @@ run_button = actionButton("run",
                           style="font-size: x-large"
                           )
 
+# Reset button
+reset_button = actionButton("reset", 
+                          "Reset to Defaults",
+                          icon=icon("undo-alt"),
+                          width="90%",
+                          align="center",
+                          style="font-size: medium"
+)
+
 # Population size
 population_size_input = sliderInput(
   "popsize",
   "Population Size:",
   min = 1,
   max = 1000,
-  value = 10
+  value = default_popsize
 )
 
 # Selection intensity
@@ -56,14 +80,14 @@ selection_intensity_input = sliderInput(
   "Selection Intensity (= fraction of offspring that are selected):",
   min = 0.001,
   max = 1,
-  value = 0.1
+  value = default_selection_intensity
 )
 
 # Number of generations
 num_generations_input = numericInput(
   "generations",
   "Generations of selection",
-  value = 1000,
+  value = default_generations,
   min = 1,
   max = 10000,
   step = 500
@@ -75,7 +99,7 @@ mutation_rate_input = sliderInput(
   "Mutation rate:",
   min = 0,
   max = 1,
-  value = 0.1,
+  value = default_mutation_rate,
   step = 0.01
 )
 
@@ -85,7 +109,7 @@ mutation_size_input = sliderInput(
   "Mutation size (standard deviation):",
   min = 0,
   max = 2,
-  value = 0.1,
+  value = default_mutation_size,
   step = 0.05
 )
 
@@ -211,8 +235,17 @@ sidebar = dashboardSidebar(
   file_input_box,
   population_box,
   mutation_box,
+  reset_button,
+  hr(),
   run_button,
-  warning_box
+  warning_box, 
+  
+  # Script to allow reseting
+  tags$script("
+    Shiny.addCustomMessageHandler('resetValue', function(variableName) {
+      Shiny.onInputChange(variableName, null);
+    });
+    ")
 )
 
 ###################
@@ -241,20 +274,20 @@ body =  dashboardBody(
 # Combine final user interface
 ##################
 ui <- dashboardPage(header, sidebar, body,
-                    skin = "purple")
+                    skin = "purple", useShinyjs())
 
 
 ##################
 # Server functions
 ##################
 server <- function(input, output, session) {
+  
   # Load Image
   image_loaded = reactive({
     # If no file uploaded, return NuLL
     if (is.null(input$infile)) {
       return(NULL)
     }
-    # is_running(FALSE) # Stop the evolution if a new image is loaded
     load.image(input$infile$datapath) # Internal path to the loaded data
   })
   
@@ -295,6 +328,34 @@ server <- function(input, output, session) {
     }
   })
   
+  # Reset everything
+  observeEvent(input$reset, {
+    # Stop the simulation
+    if(is_running()){
+      is_running(FALSE)
+    }
+    
+    # Reset user-set parameters
+    updateNumericInput(session, "max_pixels", value=default_max_pixels)
+    updateCheckboxInput(session, "grayscale", value=default_grayscale)
+    updateSliderInput(session, "popsize", value=default_popsize)
+    updateSliderInput(session, "selection", value=default_selection_intensity)
+    updateNumericInput(session, "generations", value=default_generations)
+    updateSliderInput(session, "mutation_rate", value=default_mutation_rate)
+    updateSliderInput(session, "mutation_sd", value=default_mutation_size)
+    
+    # Reset input file
+    shinyjs::reset("infile")
+    session$sendCustomMessage(type = "resetValue", message = "infile")
+    
+    # Reset any partial evolution
+    current_pop$avg_image=NULL
+    current_pop$avg_fitness=NULL
+    current_pop$avg_pop=NULL
+
+    #shinyjs::reset("target_image")
+  })
+  
   # Display current target image
   output$target_image <- renderPlot({
     if (length(image_target()) > 0) {
@@ -318,7 +379,7 @@ server <- function(input, output, session) {
   # Fitness plot
   output$fitness_progress <- renderPlot({
     if (!is.null(current_pop$avg_fitness)) {
-      plot(current_pop$avg_fitness)
+      plot(current_pop$avg_fitness, xlab="Generation", ylab="Fitness", pch=20)
     }
   })
   
@@ -335,7 +396,6 @@ server <- function(input, output, session) {
   
   # Calculate current fitness
   current_fitness = reactive({
-    print(str(current_pop))
     if (is.null(current_pop$avg_fitness)) {
       return(NA) # If nothing happened yet, return NA
     }else{

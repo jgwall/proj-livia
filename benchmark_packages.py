@@ -9,7 +9,9 @@ from PIL import Image, ImageOps
 import matplotlib.image as image
 from pycallgraph2 import PyCallGraph
 from pycallgraph2.output import GraphvizOutput
-
+import multiprocessing as mp
+import timeit
+from livia import mutate
 
 debug = False
 
@@ -31,17 +33,25 @@ def main():
     # Test evolution wrapper
 
 
-    with PyCallGraph(output=GraphvizOutput()):
-        mytest = livia.evolve_images(target,
-                                   popsize=10,
-                                   selection=0.1,
-                                   mutation_rate=0.1,
-                                   mutation_sd=0.01,
-                                   generations=1000,
-                                   #gen_interval=100,
-                                   verbose=True,
-                                   #outprefix="tmp/test",
-                                   seed=1 )
+    # with PyCallGraph(output=GraphvizOutput()):
+    #     mytest = livia.evolve_images(target,
+    #                                popsize=10,
+    #                                selection=0.1,
+    #                                mutation_rate=0.1,
+    #                                mutation_sd=0.01,
+    #                                generations=1000,
+    #                                #gen_interval=100,
+    #                                verbose=True,
+    #                                #outprefix="tmp/test",
+    #                                seed=1 )
+
+    #TODO: Below not working right
+    target = livia.pil_to_numpy(target)
+    mutate(target)
+    timeit.timeit("[ mutate(target) for i in range(56)]", number=100, setup="from __main__ import mutate, target")
+    #timeit.timeit("pool.map(mutate, [target]*56 )", number=100)
+    # pool = mp.Pool(mp.cpu_count())
+    # result = pool.map(livia.mutate, [target]*56 )
 
 
     # # Convert to numpy array (presumably faster than a PIl Image
